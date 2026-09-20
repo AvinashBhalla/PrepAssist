@@ -6,7 +6,7 @@ Full-stack engineering assessment for turning a job description and company rese
 
 The system accepts a pasted job description, a company website, and the days remaining until an interview. It supports single and batch preparation, partial research, structured requirement extraction, generated study materials, deterministic coverage checks, deterministic scheduling, editing, section regeneration, and confidence-aware flashcard practice.
 
-Appendix A defines the generated kit contract. Appendix B defines batch output. Those contracts are authoritative and must not be renamed or reshaped.
+Appendix A defines the generated kit contract with the exact top-level fields `source`, `company_brief`, `role`, `questions`, `flashcards`, `schedule`, and `coverage`. Appendix B defines batch input and output; those contracts are authoritative and must not be renamed or reshaped.
 
 ## Architecture
 
@@ -34,7 +34,9 @@ The required command is:
 npm run evaluate -- --input <cases.json> --output <kits.json>
 ```
 
-The evaluator will use the same pipeline as the application and will emit Appendix B output. It is intentionally not implemented in this planning phase.
+The evaluator will use the same pipeline as the application and will emit Appendix B output. Input cases contain `id`, `jd`, `company_url`, and `days`. Output contains `version`, `generated_at`, and `kits[]`, with each entry containing `id`, `status`, `kit`, and `error`. `status` is `ok` or `failed`; failed cases continue without aborting the batch. The command is intentionally not implemented in this planning phase.
+
+The contract also requires stable requirement IDs, question `requirement_ids`, requirement priorities of `must` or `nice`, requirement kinds of `technical`, `behavioural`, or `domain`, question categories of `technical`, `behavioural`, `system-design`, or `company-fit`, integer difficulty from 1 to 3, deterministic coverage, and deterministic scheduling. Schedule days equal requested days, schedule minutes are integers, schedule question IDs reference existing questions, and `coverage.passes` records the number of coverage passes. See [docs/assignment-contract.md](docs/assignment-contract.md) for the full contract.
 
 ## Deployment
 
