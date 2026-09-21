@@ -46,28 +46,14 @@ coverage
 
 The batch evaluator follows Appendix B. Its input cases use `id`, `jd`, `company_url`, and `days`. Its output uses `version`, `generated_at`, and `kits[]`; each kit entry contains `id`, `status`, `kit`, and `error`. `status` is `ok` or `failed`, failed cases continue processing, and output entries correspond to the input case IDs.
 
-## Proposed folder structure
+## Phase 1A folder structure
 
 ```text
-apps/
-  web/                         # Next.js + TypeScript + Tailwind UI
-  api/                         # Express HTTP adapter
-packages/
-  contracts/                   # Zod schemas and shared TypeScript types
-  pipeline/                    # Orchestration and use cases
-  retrieval/                   # fetch/Cheerio retrieval and source normalization
-  extraction/                  # JD requirement extraction and stable IDs
-  generation/                  # Provider abstraction and section generators
-  coverage/                    # Deterministic requirement/question checks
-  scheduling/                  # Deterministic study allocation
-  persistence/                 # MongoDB repositories and mapping
-  shared/                      # Errors, IDs, logging, and small utilities
-cli/
-  evaluate.ts                  # npm run evaluate adapter over the shared pipeline
-tests/
-  unit/                        # Deterministic package tests
-  integration/                 # Pipeline and persistence boundary tests
-  fixtures/                    # Sanitized input and expected output fixtures
+frontend/                      # Next.js App Router and Tailwind UI
+backend/                       # Express HTTP adapter
+shared/                        # Shared TypeScript types and Zod schemas
+scripts/                       # Repository-level scripts, added as needed
+test-cases/                    # Assessment fixtures, added as needed
 docs/
   architecture.md
   assignment-contract.md
@@ -75,8 +61,9 @@ docs/
 
 ## Runtime boundaries
 
-- **Web:** authentication screens, kit editing, section regeneration, and flashcard practice. The UI calls the API and never makes provider or scraping decisions.
-- **API:** request authentication, authorization, duplicate-submission handling, input validation, and use-case invocation.
+- **Frontend:** Next.js App Router pages, layout, and reusable UI primitives. It calls the backend API and contains no research or business workflow decisions.
+- **Backend:** Express HTTP boundary, request validation, security middleware, route/controller wiring, and future application services. Authentication, retrieval, generation, persistence, and business workflows are intentionally deferred.
+- **Shared:** API response types, placeholder user/kit types, and reusable Zod schemas shared by frontend/backend boundaries.
 - **Pipeline:** owns the ordered workflow and partial-result behavior. It accepts normalized input and returns a contract-valid result plus diagnostics.
 - **Retrieval:** fetches the supplied company URL and discovered pages with timeouts, redirect limits, size limits, and source metadata. Cheerio parses HTML. Retrieved text is untrusted data, never instructions.
 - **Extraction:** converts the JD into requirements with stable `id` values, `priority` of `must` or `nice`, and `kind` of `technical`, `behavioural`, or `domain`. It must distinguish explicit requirements from unknown or unavailable information and must not invent requirements.
@@ -84,6 +71,26 @@ docs/
 - **Coverage:** ordinary application code maps every `must` requirement to question IDs and deterministically produces `uncovered_requirement_ids`. It records the number of coverage passes in `passes` and can request another generation pass for only the missing requirements.
 - **Scheduling:** ordinary application code allocates study work from available days, requirements, questions, flashcards, and user constraints. The number of schedule days equals the requested days, minutes are integers, and every `question_id` references an existing question. Equal inputs produce equal schedules.
 - **Persistence:** MongoDB repositories store users, kits, source snapshots, generated sections, edits, practice attempts, and regeneration metadata. Domain services merge regenerated sections without overwriting edits in unrelated sections.
+
+## API boundary
+
+The backend exposes `/api/*` routes. Phase 1A provides only `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows the configured `FRONTEND_URL` during local development.
+
+## Development commands
+
+From the repository root:
+
+```text
+npm install
+npm run dev:frontend
+npm run dev:backend
+npm run test
+npm run typecheck
+npm run build:frontend
+npm run build:backend
+```
+
+Run the frontend and backend development commands in separate terminals. The foundation deliberately does not add a database connection, authentication, research pipeline, LLM integration, batch evaluator, or advanced UI.
 
 ## Regeneration and editing model
 

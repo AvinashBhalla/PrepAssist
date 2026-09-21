@@ -14,7 +14,52 @@ The application and `evaluate` CLI share one pipeline with separate adapters. Re
 
 ## Local Setup
 
-Setup instructions will be added after the project packages, database configuration, and exact Appendix A/B contracts are approved.
+### Prerequisites
+
+- Node.js 20 or newer
+- npm 10 or newer
+- MongoDB is not required for the Phase 1A health endpoint
+
+### Install
+
+```text
+npm install
+```
+
+Copy `.env.example` to `.env` when local environment configuration is needed. Phase 1A does not connect to MongoDB or implement authentication.
+
+### Start the frontend
+
+```text
+npm run dev:frontend
+```
+
+The frontend is available at `http://localhost:3000`.
+
+### Start the backend
+
+In a second terminal:
+
+```text
+npm run dev:backend
+```
+
+The backend listens on `http://localhost:4000`.
+
+### Health endpoint
+
+```text
+GET http://localhost:4000/api/health
+```
+
+Expected response:
+
+```json
+{
+	"ok": true,
+	"service": "PrepAssist"
+}
+```
 
 Planned prerequisites: Node.js, npm, MongoDB, and credentials for one supported LLM provider.
 
