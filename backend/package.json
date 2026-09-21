@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "cors": "latest",
+    "bcryptjs": "latest",
+    "cookie-parser": "latest",
     "dotenv": "latest",
     "express": "latest",
     "helmet": "latest",
@@ -18,8 +20,11 @@
   },
   "devDependencies": {
     "@types/cors": "latest",
+    "@types/cookie-parser": "latest",
     "@types/express": "latest",
     "@types/node": "latest",
+    "@types/jsonwebtoken": "latest",
+    "jsonwebtoken": "latest",
     "supertest": "latest",
     "tsx": "latest",
     "typescript": "latest",

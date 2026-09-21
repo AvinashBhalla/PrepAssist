@@ -74,7 +74,15 @@ docs/
 
 ## API boundary
 
-The backend exposes `/api/*` routes. Phase 1A provides only `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows the configured `FRONTEND_URL` during local development.
+The backend exposes `/api/*` routes. The foundation provides `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`, and the authentication routes described below. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows only the configured `FRONTEND_URL` and credentials during local development.
+
+## Authentication and session boundary
+
+Registration and login validate `{ email, password }` with Zod, normalize email to lowercase, hash passwords with bcryptjs, and issue a signed JWT in an HTTP-only `prep_assist_session` cookie. The JWT contains only the user ID in `sub` and expires after one hour. Logout clears the cookie. `GET /api/auth/me` and `GET /api/auth/protected-test` use `requireAuth`, which verifies the cookie token and exposes the authenticated ID through typed `request.userId`; client-supplied owner IDs are never trusted.
+
+In development, the cookie uses `httpOnly: true`, `sameSite: "lax"`, and `secure: false`. In production, `secure` becomes `true`; the other protections remain enabled. Invalid, missing, expired, or tampered tokens return a structured 401 without stack traces or sensitive details. JWT secrets remain in `JWT_SECRET` and are never returned or logged.
+
+Controllers must never accept a client-supplied owner ID for ownership decisions. Future kit controllers will obtain the owner exclusively from `requireAuth`, and kit repository methods will continue to require `userId`.
 
 ## MongoDB persistence
 
@@ -102,7 +110,7 @@ npm run build:frontend
 npm run build:backend
 ```
 
-Run the frontend and backend development commands in separate terminals. The foundation deliberately does not add a database connection, authentication, research pipeline, LLM integration, batch evaluator, or advanced UI.
+Run the frontend and backend development commands in separate terminals. The current foundation deliberately does not add research, LLM integration, batch evaluation, or advanced UI.
 
 ## Regeneration and editing model
 

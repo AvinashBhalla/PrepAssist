@@ -18,7 +18,7 @@ The application and `evaluate` CLI share one pipeline with separate adapters. Re
 
 - Node.js 20 or newer
 - npm 10 or newer
-- MongoDB is not required for the Phase 1A health endpoint
+- MongoDB is not required for the authentication unit tests
 
 ### Install
 
@@ -26,7 +26,7 @@ The application and `evaluate` CLI share one pipeline with separate adapters. Re
 npm install
 ```
 
-Copy `.env.example` to `.env` when local environment configuration is needed. Phase 1A does not connect to MongoDB or implement authentication.
+Copy `.env.example` to `.env` and set `JWT_SECRET` to a long random value. Authentication tests use an in-memory repository; a live MongoDB instance is not required for the unit suite.
 
 ### Start the frontend
 
@@ -61,15 +61,23 @@ Expected response:
 }
 ```
 
-Planned prerequisites: Node.js, npm, MongoDB, and credentials for one supported LLM provider.
-
 ## Environment Variables
 
-Copy `.env.example` to `.env` and provide local values. Provider keys and authentication secrets must remain local and must never be committed.
+Copy `.env.example` to `.env` and provide local values. `JWT_SECRET` signs one-hour HTTP-only cookie sessions. Provider keys and authentication secrets must remain local and must never be committed.
+
+## Authentication Endpoints
+
+- `POST /api/auth/register` creates an account and establishes a session.
+- `POST /api/auth/login` establishes a session for valid credentials.
+- `POST /api/auth/logout` clears the session cookie.
+- `GET /api/auth/me` returns the authenticated user's safe public information.
+- `GET /api/auth/protected-test` is development/test infrastructure for verifying `requireAuth`.
+
+Authenticated browser requests must include credentials so the HTTP-only cookie is sent to the backend.
 
 ## Testing
 
-Testing commands and fixtures will be added with the Vitest setup. The initial suite will cover deterministic coverage and scheduling, contract validation, failure handling, and parity between API and batch pipeline execution.
+Run `npm test` for the Vitest suite. Authentication tests use a mocked repository and do not require a production MongoDB connection.
 
 ## Batch Evaluation
 
