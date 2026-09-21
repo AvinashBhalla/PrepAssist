@@ -76,6 +76,18 @@ docs/
 
 The backend exposes `/api/*` routes. Phase 1A provides only `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows the configured `FRONTEND_URL` during local development.
 
+## MongoDB persistence
+
+MongoDB Atlas is the planned persistence service, accessed through Mongoose. The reusable connection module reads `MONGODB_URI`, rejects a missing value clearly, reuses an in-flight connection promise during development, and reports connection failures without logging the URI. Persistence code does not connect during unit tests.
+
+- **User:** `_id`, normalized lowercase `email`, `passwordHash`, `createdAt`, and `updatedAt`.
+- **Kit:** `_id`, ownership `userId`, hashed input `fingerprint`, `status`, Appendix A `kit`, separate `itemStates`, `createdAt`, and `updatedAt`.
+- **Kit status:** `draft`, `generating`, `ready`, or `failed`.
+- **Repositories:** user and kit repositories own Mongoose operations. Kit reads and updates require both kit ID and user ID; there is no public unscoped kit lookup.
+- **Duplicate strategy:** the fingerprint is a SHA-256 hash of the normalized job description, company URL, and requested days. A compound unique index on `userId` and `fingerprint` prevents duplicate kits for one owner while allowing different users to prepare the same role.
+
+The Appendix A object remains content-only and preserves its exact field names. Editor metadata is stored in `itemStates`, keyed separately for questions, flashcards, company brief entries, and schedule sections. Each state can be `generated`, `edited`, `pinned`, or `deleted`, allowing future regeneration to preserve pinned/edited content and keep deleted content from silently returning without contaminating the external kit contract.
+
 ## Development commands
 
 From the repository root:

@@ -13,6 +13,7 @@
     "dotenv": "latest",
     "express": "latest",
     "helmet": "latest",
+    "mongoose": "latest",
     "zod": "latest"
   },
   "devDependencies": {

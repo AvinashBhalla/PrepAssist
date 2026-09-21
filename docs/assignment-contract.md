@@ -95,6 +95,10 @@ Rules:
 
 Zod schemas validate API input, provider responses, internal section boundaries, and final Appendix A/B serialization. Duplicate submissions are handled idempotently using an authenticated user plus a stable submission key when available; the behavior for a repeated request must be defined in the API contract before implementation.
 
+Persistence stores the Appendix A object under the exact `kit` field without editor metadata. Editor state is stored separately under `itemStates`, with state values `generated`, `edited`, `pinned`, or `deleted` for questions, flashcards, company brief entries, and schedule sections as applicable. Kit duplicate detection uses a cryptographic fingerprint of the normalized job description, company URL, and requested days, scoped to `userId`.
+
+The persistence model uses MongoDB Atlas through Mongoose. Kit repository operations require both kit ID and `userId`; ownership is part of every read and update boundary.
+
 ## Remaining approvals
 
 1. Confirm the retention policy for retrieved source text and provider request/response diagnostics.
