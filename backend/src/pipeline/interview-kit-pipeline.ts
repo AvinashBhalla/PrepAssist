@@ -10,6 +10,10 @@ import type { PublicInterviewResearch, PublicSearchProvider } from "../research/
 import { generateCompanyBriefAndRole, type CompanyBrief, type CompanyBriefRoleResult, type RoleMetadata } from "../generation/company-brief-role.js";
 import { generateInterviewQuestions, type GeneratedQuestion, type QuestionGenerationOptions } from "../generation/question-generation.js";
 import { generateFlashcards, type FlashcardGenerationOptions, type GeneratedFlashcard, type FlashcardTraceability } from "../generation/flashcard-generation.js";
+import { generateCoverageRepairQuestions, mergeCoverageRepairQuestions } from "../generation/coverage-repair.js";
+import { finalizeInterviewKit } from "../generation/final-kit.js";
+import { checkCoverage, type CoverageFacts } from "../deterministic/coverage.js";
+import type { AppendixAKit } from "@prep-assist/shared";
 import type { LLMProvider } from "../llm/types.js";
 import type { HttpFetcher } from "../retrieval/fetcher.js";
 
@@ -29,8 +33,13 @@ export type PipelineStage =
   | "SEARCHING_INTERVIEWS"
   | "GENERATING_COMPANY_BRIEF"
   | "GENERATING_QUESTIONS"
+  | "CHECKING_COVERAGE"
+  | "REPAIRING_COVERAGE"
+  | "CHECKING_COVERAGE_AGAIN"
   | "GENERATING_FLASHCARDS"
-  | "DRAFT_COMPLETE"
+  | "BUILDING_SCHEDULE"
+  | "VALIDATING_FINAL_KIT"
+  | "READY"
   | "FAILED";
 
 export type PipelineProgressStatus = "pending" | "running" | "completed" | "failed" | "skipped";
@@ -80,6 +89,9 @@ export type InterviewKitPipelineContext = {
   questions?: GeneratedQuestion[];
   flashcards?: GeneratedFlashcard[];
   flashcardTraceability?: FlashcardTraceability[];
+  coverage?: CoverageFacts;
+  coveragePasses?: number;
+  finalKit?: AppendixAKit;
   existingKit?: unknown;
   diagnostics: {
     companyResearch?: ResearchBundle["diagnostics"];
@@ -90,7 +102,7 @@ export type InterviewKitPipelineContext = {
 };
 
 export type InterviewKitPipelineResult =
-  | { status: "newly_generated"; context: InterviewKitPipelineContext; draft: IncompleteInterviewKitDraft }
+  | { status: "newly_generated"; context: InterviewKitPipelineContext; kit: AppendixAKit }
   | { status: "reused_existing"; context: InterviewKitPipelineContext; kit: unknown }
   | { status: "failed"; context: InterviewKitPipelineContext; failure: PipelineFailure };
 
@@ -106,6 +118,8 @@ export type InterviewKitPipelineDependencies = {
   generateBriefRole?: typeof generateCompanyBriefAndRole;
   generateQuestions?: typeof generateInterviewQuestions;
   generateFlashcardsStage?: typeof generateFlashcards;
+  repairQuestions?: typeof generateCoverageRepairQuestions;
+  finalizeKit?: typeof finalizeInterviewKit;
   onProgress?: (event: PipelineProgressEvent) => void;
   now?: () => string;
   retrievalEnvironment?: CrawlerOptions["environment"];
@@ -131,7 +145,7 @@ export async function generateInterviewKit(
       const duplicate = await dependencies.duplicateLookup(input.userId, context.fingerprint);
       if (duplicate.kit !== undefined) {
         context.existingKit = duplicate.kit;
-        emit(context, dependencies.onProgress, now, "DRAFT_COMPLETE", "skipped", "Reused existing kit for this user and input");
+        emit(context, dependencies.onProgress, now, "READY", "skipped", "Reused existing kit for this user and input");
         return { status: "reused_existing", context, kit: duplicate.kit };
       }
     }
@@ -160,14 +174,41 @@ export async function generateInterviewKit(
     context.questions = (await (dependencies.generateQuestions ?? generateInterviewQuestions)({ requirements: context.requirements.requirements, companyBrief: context.companyBrief, role: context.role, companyResearch: context.companyResearch, publicInterviewResearch: context.interviewResearch }, { provider: dependencies.provider })).questions;
     complete(context, dependencies.onProgress, now, "GENERATING_QUESTIONS", "Interview questions generated");
 
+    emit(context, dependencies.onProgress, now, "CHECKING_COVERAGE", "running", "Checking must-have requirement coverage");
+    context.coverage = checkCoverage(context.requirements.requirements, context.questions);
+    context.coveragePasses = 1;
+    if (context.coverage.uncovered_requirement_ids.length === 0) {
+      complete(context, dependencies.onProgress, now, "CHECKING_COVERAGE", "All must-have requirements are covered");
+    } else {
+      complete(context, dependencies.onProgress, now, "CHECKING_COVERAGE", "Coverage gaps found");
+      emit(context, dependencies.onProgress, now, "REPAIRING_COVERAGE", "running", "Generating questions for uncovered must requirements");
+      const repairQuestions = await (dependencies.repairQuestions ?? generateCoverageRepairQuestions)({ requirements: context.requirements.requirements, uncoveredRequirementIds: context.coverage.uncovered_requirement_ids, role: context.role, companyResearch: context.companyResearch, interviewResearch: context.interviewResearch }, { provider: dependencies.provider });
+      context.questions = mergeCoverageRepairQuestions(context.questions, repairQuestions);
+      complete(context, dependencies.onProgress, now, "REPAIRING_COVERAGE", "Coverage repair questions generated");
+      emit(context, dependencies.onProgress, now, "CHECKING_COVERAGE_AGAIN", "running", "Rechecking must-have requirement coverage");
+      context.coverage = checkCoverage(context.requirements.requirements, context.questions);
+      context.coveragePasses = 2;
+      if (context.coverage.uncovered_requirement_ids.length > 0) {
+        return fail(context, "CHECKING_COVERAGE_AGAIN", "COVERAGE_UNRESOLVED", `Uncovered must requirements remain: ${context.coverage.uncovered_requirement_ids.join(", ")}`, true, dependencies.onProgress, now);
+      }
+      complete(context, dependencies.onProgress, now, "CHECKING_COVERAGE_AGAIN", "All must-have requirements are covered after repair");
+    }
+
     emit(context, dependencies.onProgress, now, "GENERATING_FLASHCARDS", "running", "Generating interview flashcards");
     const flashcards = await (dependencies.generateFlashcardsStage ?? generateFlashcards)({ questions: context.questions, requirements: context.requirements.requirements, role: { title: context.role.title, seniority: context.role.seniority } }, { provider: dependencies.provider });
     context.flashcards = flashcards.flashcards;
     context.flashcardTraceability = flashcards.traceability;
     complete(context, dependencies.onProgress, now, "GENERATING_FLASHCARDS", "Flashcards generated");
 
-    emit(context, dependencies.onProgress, now, "DRAFT_COMPLETE", "completed", "Draft kit is ready for deterministic schedule and coverage stages");
-    return { status: "newly_generated", context, draft: assembleDraft(context, now()) };
+    emit(context, dependencies.onProgress, now, "BUILDING_SCHEDULE", "running", "Allocating deterministic study schedule");
+    emit(context, dependencies.onProgress, now, "VALIDATING_FINAL_KIT", "running", "Validating final Appendix A kit");
+    const validation = (dependencies.finalizeKit ?? finalizeInterviewKit)({ jd: input.jd, companyUrl: input.company_url, days: input.days, requirements: context.requirements.requirements, companyBrief: context.companyBrief, role: context.role, questions: context.questions, flashcards: context.flashcards, companyResearch: context.companyResearch, uncoveredRequirementIds: context.coverage.uncovered_requirement_ids, coveragePasses: context.coveragePasses, researchedAt: now() });
+    if (!validation.valid) return fail(context, "VALIDATING_FINAL_KIT", "FINAL_KIT_VALIDATION_FAILED", validation.errors.map((error) => `${error.code}: ${error.message}`).join("; "), true, dependencies.onProgress, now);
+    context.finalKit = validation.kit;
+    complete(context, dependencies.onProgress, now, "BUILDING_SCHEDULE", "Deterministic schedule allocated");
+    complete(context, dependencies.onProgress, now, "VALIDATING_FINAL_KIT", "Final Appendix A kit validated");
+    emit(context, dependencies.onProgress, now, "READY", "completed", "Final interview kit is ready");
+    return { status: "newly_generated", context, kit: validation.kit };
   } catch (error) {
     const stage = currentRunningStage(context) ?? "FAILED";
     return fail(context, stage, "PIPELINE_STAGE_FAILED", safeMessage(error), true, dependencies.onProgress, now);

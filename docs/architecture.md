@@ -166,15 +166,23 @@ validate input and URL
         -> search public interview discussion
         -> generate company brief and role metadata
         -> generate technical/behavioural/system-design/company-fit questions
-        -> generate flashcards
-        -> return incomplete draft for deterministic schedule/coverage stages
+        -> deterministic coverage check (pass 1)
+        -> one bounded repair call only for uncovered must requirements
+        -> deterministic coverage check (pass 2 when repair was needed)
+        -> generate flashcards once from final questions
+        -> allocate deterministic schedule
+        -> validate and return final Appendix A kit
 ```
 
-The pipeline passes the JD only to requirement/role stages, company crawler evidence to company-context stages, and public interview evidence to interview/company-fit context. It does not add retries; retrieval and LLM layers own their retry policies. It also does not call providers directly outside the injected generation services, so the expected generation calls remain the Phase 3B-3E calls: requirement extraction, company/role generation, four question-category calls, and flashcard generation.
+The pipeline passes the JD only to requirement/role stages, company crawler evidence to company-context stages, and public interview evidence to interview/company-fit context. It does not add retries; retrieval and LLM layers own their retry policies. Coverage repair receives only the existing uncovered requirements and bounded context, never reruns extraction, crawling, public search, or the four full question generators.
 
-Progress is emitted as safe `{ stage, status, message, timestamp }` events for `VALIDATING_INPUT`, `EXTRACTING_REQUIREMENTS`, `CRAWLING_COMPANY`, `SEARCHING_INTERVIEWS`, `GENERATING_COMPANY_BRIEF`, `GENERATING_QUESTIONS`, `GENERATING_FLASHCARDS`, `DRAFT_COMPLETE`, and `FAILED`. Messages contain no prompts, research text, credentials, or other secrets.
+Coverage has a maximum of two passes. Pass 1 records the initial deterministic result. If must requirements are uncovered, one repair call returns targeted questions, which are appended after the original questions with application-assigned IDs; original question IDs remain unchanged. Pass 2 checks the merged set. If a must requirement is still uncovered, the pipeline returns fatal `COVERAGE_UNRESOLVED` diagnostics and does not generate flashcards or return a kit.
 
-Requirement extraction failure, question failure, invalid input, or an unusable generation stage is fatal and returns a structured failure. A duplicate is not fatal: after validation and fingerprinting, a user-scoped lookup may return an existing usable kit, which is returned with `status=reused_existing` and leaves the stored kit unchanged. A lookup miss continues generation and returns `status=newly_generated`. Missing public discussion, failed public sources, missing hiring pages, and partial company retrieval remain non-fatal; their diagnostics are preserved in the context and the brief must remain honest. A newly generated result is explicitly `newly_generated` and its internal draft has `complete: false`; `schedule` and `coverage` are omitted until later deterministic stages. It is not presented as a valid final Appendix A kit.
+Flashcards are generated exactly once, after the final question set is known. The deterministic schedule is allocated from that same final question set, then `validateFinalKit` verifies the exact Appendix A shape, all references, coverage agreement, positive pass count, requested day count, and scheduled must coverage. A final validation failure is fatal and no invalid kit is returned.
+
+Progress is emitted as safe `{ stage, status, message, timestamp }` events for `VALIDATING_INPUT`, `EXTRACTING_REQUIREMENTS`, `CRAWLING_COMPANY`, `SEARCHING_INTERVIEWS`, `GENERATING_COMPANY_BRIEF`, `GENERATING_QUESTIONS`, `CHECKING_COVERAGE`, conditional `REPAIRING_COVERAGE`, conditional `CHECKING_COVERAGE_AGAIN`, `GENERATING_FLASHCARDS`, `BUILDING_SCHEDULE`, `VALIDATING_FINAL_KIT`, `READY`, and `FAILED`. Messages contain no prompts, research text, credentials, or other secrets.
+
+Requirement extraction failure, question failure, flashcard failure, invalid input, unresolved must coverage, or final validation failure is fatal and returns a structured failure. A duplicate is not fatal: after validation and fingerprinting, a user-scoped lookup may return an existing usable kit, which is returned with `status=reused_existing` and leaves the stored kit unchanged. A lookup miss continues generation and returns `status=newly_generated` with a complete validated kit. Missing public discussion, failed public sources, missing hiring pages, and partial company retrieval remain non-fatal; their diagnostics are preserved in the context and the brief must remain honest.
 
 ## Flashcard generation
 

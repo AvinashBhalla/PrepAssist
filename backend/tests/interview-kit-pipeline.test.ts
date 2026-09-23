@@ -110,14 +110,14 @@ describe("interview kit pipeline orchestration", () => {
     expect(result.context.flashcards?.[0].id).toBe("f1");
   });
 
-  it("returns an incomplete draft without schedule or coverage", async () => {
+  it("returns a final Appendix A kit with deterministic schedule and coverage", async () => {
     const result = await generateInterviewKit({ jd: "JD", company_url: "https://example.com", days: 2 }, baseDependencies([]));
 
     expect(result.status).toBe("newly_generated");
     if (result.status === "newly_generated") {
-      expect(result.draft.complete).toBe(false);
-      expect(result.draft.schedule).toBeUndefined();
-      expect(result.draft.coverage).toBeUndefined();
+      expect(result.kit.schedule.days_available).toBe(2);
+      expect(result.kit.coverage.passes).toBe(1);
+      expect(result.kit.coverage.uncovered_requirement_ids).toEqual([]);
     }
   });
 
@@ -212,8 +212,11 @@ describe("interview kit pipeline orchestration", () => {
       "SEARCHING_INTERVIEWS:running", "SEARCHING_INTERVIEWS:completed",
       "GENERATING_COMPANY_BRIEF:running", "GENERATING_COMPANY_BRIEF:completed",
       "GENERATING_QUESTIONS:running", "GENERATING_QUESTIONS:completed",
+      "CHECKING_COVERAGE:running", "CHECKING_COVERAGE:completed",
       "GENERATING_FLASHCARDS:running", "GENERATING_FLASHCARDS:completed",
-      "DRAFT_COMPLETE:completed",
+      "BUILDING_SCHEDULE:running", "VALIDATING_FINAL_KIT:running",
+      "BUILDING_SCHEDULE:completed", "VALIDATING_FINAL_KIT:completed",
+      "READY:completed",
     ]);
     expect(JSON.stringify(progress.mock.calls)).not.toContain("password");
     expect(JSON.stringify(progress.mock.calls)).not.toContain("api_key");
