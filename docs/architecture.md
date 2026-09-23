@@ -101,6 +101,16 @@ Localhost and loopback hosts are allowed in `development` and `evaluation` mode 
 
 Deterministic retrieval happens before future LLM generation so source selection, page boundaries, failure diagnostics, and available evidence are reproducible, testable, and auditable. External page text remains untrusted data and is never treated as model instructions.
 
+## Public interview-process research
+
+Public interview research is a separate evidence-gathering stage because search results and candidate discussions are useful signals, not authoritative truth. It returns an internal `PublicInterviewResearch` structure and does not modify Appendix A, extract requirements, generate questions, or create a company brief.
+
+The service depends on the `PublicSearchProvider` abstraction (`search(query, options)`), so the rest of the application is not coupled to a particular search engine. The current provider uses DuckDuckGo's publicly accessible HTML results. A provider failure is recorded as `SEARCH_PROVIDER_UNAVAILABLE` or `SEARCH_TIMEOUT` and does not abort later queries.
+
+Queries are deterministic and bounded to at most seven families covering interview process, software engineering, the supplied role, technical interviews, hiring process, Reddit, and Glassdoor. Results are normalized to title, URL, snippet, source domain, query, and rank, then deduplicated by normalized URL. Ranking combines title/snippet interview terms, role matches, source domain, report/discussion signals, and original rank. Source classification is heuristic: `interview-report`, `discussion`, `company`, or `unknown`; a high rank is never treated as proof of reliability.
+
+The default public research limits are seven queries, five results per query, eight fetched source pages, and concurrency of two. Each candidate result page is fetched at most once through the existing security-hardened fetcher and cleaned with Cheerio. The service does not crawl arbitrary links from search results. Failed or blocked pages become `SOURCE_UNREACHABLE` or `SOURCE_BLOCKED` diagnostics while other sources continue. If no usable results are found, the service returns empty sources plus `NO_PUBLIC_DISCUSSION`; it fabricates no interview claims.
+
 ## API boundary
 
 The backend exposes `/api/*` routes. The foundation provides `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`, and the authentication routes described below. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows only the configured `FRONTEND_URL` and credentials during local development.
