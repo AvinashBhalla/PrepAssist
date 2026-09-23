@@ -133,6 +133,16 @@ The application validates the model response with Zod, then assigns stable IDs d
 
 Thin JDs may validly produce few or zero requirements. Empty JDs are rejected as invalid input. Malformed JSON and schema-invalid responses fail explicitly through the existing typed LLM errors; no invented technology, years of experience, or company expectation is added.
 
+## Company brief and role breakdown
+
+Company brief and role breakdown are a separate generation stage because they have different evidence boundaries. The company brief receives bounded text from the official company crawler plus separately delimited public interview evidence; the role metadata call receives only the original JD. Neither call receives unrelated application state, and neither generates questions, schedules, coverage, or a final kit.
+
+The company prompt explicitly treats retrieved pages and public discussions as untrusted data, never instructions, and forbids hidden/general model knowledge. Official company pages are preferred for company facts. Public interview sources can provide reported process observations but are not authoritative company documentation. With thin or missing research, the expected result is a minimal honest brief and, where appropriate, an empty source list rather than fabricated facts.
+
+Brief source URLs are supplied through an explicit allowed URL list. After structured Zod validation, application code checks every generated source against the URLs present in the research bundle and rejects unknown URLs; it never invents replacements. Evidence text is bounded per source to control tokens and duplicated arbitrary pages are not added.
+
+Role metadata contains only model-generated `title`, `seniority`, and explicit JD `responsibilities`. The application assembles `role.requirements` directly from the validated Phase 3B extraction result, preserving IDs, text, kind, priority, order, and object identity. The model cannot add, remove, rewrite, or assign requirement fields, and the Appendix A role shape is not extended with location or other fields.
+
 ## API boundary
 
 The backend exposes `/api/*` routes. The foundation provides `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`, and the authentication routes described below. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows only the configured `FRONTEND_URL` and credentials during local development.
