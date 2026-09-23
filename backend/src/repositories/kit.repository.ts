@@ -32,8 +32,14 @@ export const kitRepository = {
     kitId: string,
     userId: Types.ObjectId,
     update: Partial<Pick<KitDocument, "status" | "kit" | "itemStates" | "fingerprint">>,
+    lastUpdatedAt?: string,
   ): Promise<KitDocument | null> {
-    return KitModel.findOneAndUpdate({ _id: kitId, userId }, update, {
+    const query: Record<string, any> = { _id: kitId, userId };
+    if (lastUpdatedAt) {
+      query.updatedAt = lastUpdatedAt;
+    }
+
+    return KitModel.findOneAndUpdate(query, update, {
       new: true,
       runValidators: true,
     }).exec() as Promise<KitDocument | null>;
