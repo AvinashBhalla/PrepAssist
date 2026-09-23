@@ -12,6 +12,7 @@
     "cors": "latest",
     "bcryptjs": "latest",
     "cookie-parser": "latest",
+    "cheerio": "latest",
     "dotenv": "latest",
     "express": "latest",
     "helmet": "latest",

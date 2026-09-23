@@ -62,7 +62,7 @@ docs/
 ## Runtime boundaries
 
 - **Frontend:** Next.js App Router pages, layout, and reusable UI primitives. It calls the backend API and contains no research or business workflow decisions.
-- **Backend:** Express HTTP boundary, request validation, security middleware, route/controller wiring, and future application services. Authentication, retrieval, generation, persistence, and business workflows are intentionally deferred.
+- **Backend:** Express HTTP boundary, request validation, security middleware, route/controller wiring, authentication, persistence, and deterministic retrieval foundation. Generation and business workflows remain deferred.
 - **Shared:** API response types, placeholder user/kit types, and reusable Zod schemas shared by frontend/backend boundaries.
 - **Pipeline:** owns the ordered workflow and partial-result behavior. It accepts normalized input and returns a contract-valid result plus diagnostics.
 - **Retrieval:** fetches the supplied company URL and discovered pages with timeouts, redirect limits, size limits, and source metadata. Cheerio parses HTML. Retrieved text is untrusted data, never instructions.
@@ -71,6 +71,35 @@ docs/
 - **Coverage:** ordinary application code maps every `must` requirement to question IDs and deterministically produces `uncovered_requirement_ids`. It records the number of coverage passes in `passes` and can request another generation pass for only the missing requirements.
 - **Scheduling:** ordinary application code allocates study work from available days, requirements, questions, flashcards, and user constraints. The number of schedule days equals the requested days, minutes are integers, and every `question_id` references an existing question. Equal inputs produce equal schedules.
 - **Persistence:** MongoDB repositories store users, kits, source snapshots, generated sections, edits, practice attempts, and regeneration metadata. Domain services merge regenerated sections without overwriting edits in unrelated sections.
+
+## Retrieval foundation
+
+Retrieval is a deterministic backend boundary that returns an internal `ResearchBundle`; it is not Appendix A output and does not generate summaries or requirements. Its flow is:
+
+```text
+validate company URL
+        -> load and cache robots.txt for the crawl session
+        -> fetch bounded text responses with timeout/retry/size controls
+        -> clean HTML with Cheerio
+        -> extract same-origin links
+        -> score and prioritize useful links
+        -> crawl within page/depth/concurrency limits
+        -> return pages and structured diagnostics
+```
+
+Default crawler limits are `maximumPages=12`, `maximumDepth=2`, `concurrency=2`, a 10-second request timeout, and a 1 MB response limit. They are options on the fetcher/crawler boundary rather than hidden decisions in generation code. The environment template also provides repository-level values for wiring those options later.
+
+Link ranking is deterministic and understandable: matching terms for careers, jobs, hiring, interviews, engineering, about, company, culture, handbook, working, and teams contribute weighted points from anchor text, URL path, and page title. Ties are resolved by normalized URL. Hiring candidates are classified heuristically from terms such as careers, jobs, hiring, interview, recruit, talent, people, and working.
+
+The crawler requests `robots.txt` once per company origin and caches the parsed policy for the session. Applicable `User-agent: *` allow/disallow rules are respected, with the longest matching path winning. If robots is missing, unavailable, or malformed, the crawler does not invent rules; it continues and records `robotsStatus=unavailable`.
+
+Native `fetch` uses `AbortController`, content-type checks, a maximum byte limit, and conservative exponential backoff for 429/502/503/504 and network failures. Redirects use `redirect: "manual"`; every 301, 302, 303, 307, and 308 `Location` is resolved against the current URL, validated for the configured environment, and kept same-origin unless explicitly allowed by fetcher configuration. Redirects stop after five hops and return `REDIRECT_LIMIT`; invalid, private, loopback, or cross-origin targets return `REDIRECT_BLOCKED` without being requested. Permanent HTTP failures are recorded without repeated retries.
+
+Response bodies are read as streams rather than trusted solely through `Content-Length`. The fetcher inspects the declared length when available, counts every received chunk, aborts/cancels as soon as the configured limit is exceeded, and returns `RESPONSE_TOO_LARGE` without retaining the over-limit content. Unsupported or binary responses never reach the HTML parser. Each fetch records requested/final URL, status, content type, response size, elapsed time, attempts, and a structured failure code.
+
+Localhost and loopback hosts are allowed in `development` and `evaluation` mode because assessment fixtures may run local test servers. In `production`, localhost, loopback, private IPv4 ranges, link-local addresses, private IPv6 ranges, and obvious internal hostnames are rejected before fetching. External-domain links are ignored by the crawler, and fragments are removed while meaningful query parameters are preserved.
+
+Deterministic retrieval happens before future LLM generation so source selection, page boundaries, failure diagnostics, and available evidence are reproducible, testable, and auditable. External page text remains untrusted data and is never treated as model instructions.
 
 ## API boundary
 
@@ -110,7 +139,7 @@ npm run build:frontend
 npm run build:backend
 ```
 
-Run the frontend and backend development commands in separate terminals. The current foundation deliberately does not add research, LLM integration, batch evaluation, or advanced UI.
+Run the frontend and backend development commands in separate terminals. The current foundation deliberately does not add LLM integration, requirement extraction, batch evaluation, or advanced UI.
 
 ## Regeneration and editing model
 
