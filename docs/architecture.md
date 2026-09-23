@@ -143,6 +143,16 @@ Brief source URLs are supplied through an explicit allowed URL list. After struc
 
 Role metadata contains only model-generated `title`, `seniority`, and explicit JD `responsibilities`. The application assembles `role.requirements` directly from the validated Phase 3B extraction result, preserving IDs, text, kind, priority, order, and object identity. The model cannot add, remove, rewrite, or assign requirement fields, and the Appendix A role shape is not extended with location or other fields.
 
+## Interview question generation
+
+Question generation is split into four independent structured calls: technical, behavioural, system-design, and company-fit. Each category has its own prompt, relevant input boundary, literal category schema, and bounded output limit. The service combines the validated arrays only after all category calls complete; it does not run a repair pass or coverage calculation.
+
+The application assigns stable question IDs in final category order as `q1`, `q2`, and so on. Model-provided IDs are ignored. Every question must contain at least one requirement ID, and application code rejects any ID not present in the validated Phase 3B requirements. Categories and difficulty are validated with Zod, and difficulty is restricted to integers 1 through 3. Questions are conservatively deduplicated by category, requirement set, and normalized prompt while preserving genuinely different questions about the same requirement.
+
+Default limits are three technical questions per technical requirement, two behavioural questions per behavioural requirement, two system-design questions per applicable technical/domain requirement, five company-fit questions total, and forty questions overall. System-design generation may legitimately return an empty list when role evidence does not support it. Company-fit prompts use bounded company brief, role, official research, and clearly labeled public interview evidence; public reports can influence style or topics but are never treated as guaranteed company policy. Research text remains untrusted data and cannot override category instructions.
+
+Coverage is intentionally deferred: this stage only preserves defensible requirement links. Determining whether every `must` requirement is covered, identifying uncovered requirements, and generating repair questions belongs to deterministic/application-level later phases.
+
 ## API boundary
 
 The backend exposes `/api/*` routes. The foundation provides `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`, and the authentication routes described below. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows only the configured `FRONTEND_URL` and credentials during local development.
