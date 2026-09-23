@@ -153,6 +153,29 @@ Default limits are three technical questions per technical requirement, two beha
 
 Coverage is intentionally deferred: this stage only preserves defensible requirement links. Determining whether every `must` requirement is covered, identifying uncovered requirements, and generating repair questions belongs to deterministic/application-level later phases.
 
+## Full kit pipeline orchestration
+
+`generateInterviewKit` is the API-independent entry point shared by future REST and batch adapters. It accepts the pasted `jd`, `company_url`, `days`, and optional `userId`, then executes this fixed sequence:
+
+```text
+validate input and URL
+        -> calculate normalized fingerprint
+        -> optional userId + fingerprint duplicate lookup
+        -> extract JD requirements
+        -> crawl company website
+        -> search public interview discussion
+        -> generate company brief and role metadata
+        -> generate technical/behavioural/system-design/company-fit questions
+        -> generate flashcards
+        -> return incomplete draft for deterministic schedule/coverage stages
+```
+
+The pipeline passes the JD only to requirement/role stages, company crawler evidence to company-context stages, and public interview evidence to interview/company-fit context. It does not add retries; retrieval and LLM layers own their retry policies. It also does not call providers directly outside the injected generation services, so the expected generation calls remain the Phase 3B-3E calls: requirement extraction, company/role generation, four question-category calls, and flashcard generation.
+
+Progress is emitted as safe `{ stage, status, message, timestamp }` events for `VALIDATING_INPUT`, `EXTRACTING_REQUIREMENTS`, `CRAWLING_COMPANY`, `SEARCHING_INTERVIEWS`, `GENERATING_COMPANY_BRIEF`, `GENERATING_QUESTIONS`, `GENERATING_FLASHCARDS`, `DRAFT_COMPLETE`, and `FAILED`. Messages contain no prompts, research text, credentials, or other secrets.
+
+Requirement extraction failure, question failure, invalid input, or an unusable generation stage is fatal and returns a structured failure. A duplicate is not fatal: after validation and fingerprinting, a user-scoped lookup may return an existing usable kit, which is returned with `status=reused_existing` and leaves the stored kit unchanged. A lookup miss continues generation and returns `status=newly_generated`. Missing public discussion, failed public sources, missing hiring pages, and partial company retrieval remain non-fatal; their diagnostics are preserved in the context and the brief must remain honest. A newly generated result is explicitly `newly_generated` and its internal draft has `complete: false`; `schedule` and `coverage` are omitted until later deterministic stages. It is not presented as a valid final Appendix A kit.
+
 ## Flashcard generation
 
 Flashcards are generated in a separate stage from the validated Phase 3D question bank. The service does not retrieve research, regenerate questions, or create requirements. It sends bounded question, requirement, role, and optional supporting context to one dedicated structured call, treating all supplied content as untrusted data and instructions as non-authoritative.
@@ -181,7 +204,7 @@ MongoDB Atlas is the planned persistence service, accessed through Mongoose. The
 - **Kit:** `_id`, ownership `userId`, hashed input `fingerprint`, `status`, Appendix A `kit`, separate `itemStates`, `createdAt`, and `updatedAt`.
 - **Kit status:** `draft`, `generating`, `ready`, or `failed`.
 - **Repositories:** user and kit repositories own Mongoose operations. Kit reads and updates require both kit ID and user ID; there is no public unscoped kit lookup.
-- **Duplicate strategy:** the fingerprint is a SHA-256 hash of the normalized job description, company URL, and requested days. A compound unique index on `userId` and `fingerprint` prevents duplicate kits for one owner while allowing different users to prepare the same role.
+- **Duplicate strategy:** the fingerprint is a SHA-256 hash of the normalized job description, company URL, and requested days. A compound unique index on `userId` and `fingerprint` prevents duplicate kits for one owner while allowing different users to prepare the same role. The orchestration duplicate seam always receives both `userId` and fingerprint; an existing usable kit is reused only for that owner, while another user's kit is never returned.
 
 The Appendix A object remains content-only and preserves its exact field names. Editor metadata is stored in `itemStates`, keyed separately for questions, flashcards, company brief entries, and schedule sections. Each state can be `generated`, `edited`, `pinned`, or `deleted`, allowing future regeneration to preserve pinned/edited content and keep deleted content from silently returning without contaminating the external kit contract.
 
