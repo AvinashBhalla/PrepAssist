@@ -153,6 +153,14 @@ Default limits are three technical questions per technical requirement, two beha
 
 Coverage is intentionally deferred: this stage only preserves defensible requirement links. Determining whether every `must` requirement is covered, identifying uncovered requirements, and generating repair questions belongs to deterministic/application-level later phases.
 
+## Flashcard generation
+
+Flashcards are generated in a separate stage from the validated Phase 3D question bank. The service does not retrieve research, regenerate questions, or create requirements. It sends bounded question, requirement, role, and optional supporting context to one dedicated structured call, treating all supplied content as untrusted data and instructions as non-authoritative.
+
+Each generated card must reference an existing source question and at least one requirement linked to that question. The application validates the links, ignores model-provided flashcard IDs, conservatively removes exact normalized duplicates, enforces a default maximum of 40 cards, and assigns deterministic IDs `f1`, `f2`, and so on. Internal `questionId -> flashcardId` traceability is returned separately and is not added to the Appendix A flashcard object.
+
+Flashcard fronts are concise self-test prompts and backs are scan-friendly outlines covering concepts, trade-offs, reasoning steps, or common mistakes. Technical, behavioural, system-design, and company-fit cards remain grounded in their source questions; unsupported technologies, company facts, and candidate experiences are rejected by the prompt boundary and source-link validation. Schedule generation, coverage, practice confidence, persistence, and regeneration remain separate later stages.
+
 ## API boundary
 
 The backend exposes `/api/*` routes. The foundation provides `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`, and the authentication routes described below. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows only the configured `FRONTEND_URL` and credentials during local development.
