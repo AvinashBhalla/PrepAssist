@@ -63,7 +63,9 @@ Expected response:
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and provide local values. `JWT_SECRET` signs one-hour HTTP-only cookie sessions. Provider keys and authentication secrets must remain local and must never be committed.
+Copy `.env.example` to `.env` and provide local values. `JWT_SECRET` signs one-hour HTTP-only cookie sessions. Select `LLM_PROVIDER` as `groq`, `gemini`, or `openrouter`, then set only the corresponding API key and model variable (`GROQ_API_KEY`/`GROQ_MODEL`, `GEMINI_API_KEY`/`GEMINI_MODEL`, or `OPENROUTER_API_KEY`/`OPENROUTER_MODEL`). Provider keys and authentication secrets must remain local and must never be committed.
+
+The documented development model defaults are `openai/gpt-oss-120b`, `gemini-3.5-flash`, and `openrouter/free`. Never commit real API keys.
 
 ## Authentication Endpoints
 

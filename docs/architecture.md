@@ -111,6 +111,18 @@ Queries are deterministic and bounded to at most seven families covering intervi
 
 The default public research limits are seven queries, five results per query, eight fetched source pages, and concurrency of two. Each candidate result page is fetched at most once through the existing security-hardened fetcher and cleaned with Cheerio. The service does not crawl arbitrary links from search results. Failed or blocked pages become `SOURCE_UNREACHABLE` or `SOURCE_BLOCKED` diagnostics while other sources continue. If no usable results are found, the service returns empty sources plus `NO_PUBLIC_DISCUSSION`; it fabricates no interview claims.
 
+## LLM provider abstraction
+
+LLM access is isolated behind the provider-agnostic `LLMProvider` interface. `createLLMService` selects one of `GroqProvider`, `GeminiProvider`, or `OpenRouterProvider` from `LLM_PROVIDER`; future generation services receive the interface and never call a vendor API directly. The current implementations use small native HTTP adapters rather than an agent framework or provider SDK.
+
+Models are configured independently with `GROQ_MODEL`, `GEMINI_MODEL`, and `OPENROUTER_MODEL`. Development defaults are `openai/gpt-oss-120b`, `gemini-3.5-flash`, and `openrouter/free`; the selected provider still requires its corresponding API key. No key or model name is hard-coded into application behavior.
+
+The adapters normalize chat/content responses into text, provider, model, usage, and finish reason. They share bounded retries for 429, 500, 502, 503, 504, network failures, and timeouts, with exponential backoff and `Retry-After` support where available. Authentication and malformed-request failures are not retried. Failures become typed internal categories such as `LLM_AUTHENTICATION_FAILED`, `LLM_RATE_LIMITED`, `LLM_TIMEOUT`, `LLM_PROVIDER_UNAVAILABLE`, `LLM_INVALID_RESPONSE`, and `LLM_CONFIGURATION_ERROR`. Provider selection is explicit through `LLM_PROVIDER`; automatic fallback is intentionally not performed because it can change model behavior and cost unexpectedly.
+
+`generateStructured` requests provider JSON mode when supported, extracts only plain text or a complete JSON code fence, parses with `JSON.parse`, and validates the result against the caller's Zod schema. Malformed JSON and schema mismatches return typed errors; arbitrary output is never converted into fabricated data. This layer does not define interview-kit prompts.
+
+Observability records provider, model, operation, duration, retry count, success/failure, and token usage only. API keys, authorization headers, job descriptions, and research corpora are not logged. LLM generation remains separate from deterministic business logic: schedule allocation, coverage, requirement matching, and final contract validation will remain ordinary application code rather than model decisions.
+
 ## API boundary
 
 The backend exposes `/api/*` routes. The foundation provides `GET /api/health`, returning `{ "ok": true, "service": "PrepAssist" }`, and the authentication routes described below. The frontend runs independently on port 3000 and the backend runs independently on port 4000. CORS allows only the configured `FRONTEND_URL` and credentials during local development.
